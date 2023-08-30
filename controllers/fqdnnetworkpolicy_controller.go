@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/config/options"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -38,8 +39,9 @@ import (
 // FQDNNetworkPolicyReconciler reconciles a FQDNNetworkPolicy object
 type FQDNNetworkPolicyReconciler struct {
 	client.Client
-	Log    logr.Logger
-	Scheme *runtime.Scheme
+	Log     logr.Logger
+	Scheme  *runtime.Scheme
+	Options options.Opts
 }
 
 var (
@@ -47,8 +49,6 @@ var (
 	deletePolicyAnnotation = "fqdnnetworkpolicies.networking.gke.io/delete-policy"
 	aaaaLookupsAnnotation  = "fqdnnetworkpolicies.networking.gke.io/aaaa-lookups"
 	finalizerName          = "finalizer.fqdnnetworkpolicies.networking.gke.io"
-	// TODO make retry configurable
-	retry = time.Second * time.Duration(10)
 )
 
 //+kubebuilder:rbac:groups=networking.gke.io,resources=fqdnnetworkpolicies,verbs=get;list;watch;create;update;patch;delete
@@ -129,8 +129,17 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	nextSyncIn, err := r.updateNetworkPolicy(ctx, fqdnNetworkPolicy)
 	if err != nil {
 		log.Error(err, "unable to update NetworkPolicy")
+		// Need to fetch the object again before updating FQDNNetworkPolicy
+		if ee := r.Get(ctx, client.ObjectKey{
+			Namespace: req.Namespace,
+			Name:      req.Name,
+		}, fqdnNetworkPolicy); ee != nil {
+			log.Error(err, "unable to fetch FQDNNetworkPolicy")
+			return ctrl.Result{}, err
+		}
 		fqdnNetworkPolicy.Status.State = networkingv1alpha3.PendingState
 		fqdnNetworkPolicy.Status.Reason = err.Error()
+		retry := time.Second * time.Duration(r.Options.UpdateFQDNRetryTime)
 		n := metav1.NewTime(time.Now().Add(retry))
 		fqdnNetworkPolicy.Status.NextSyncTime = &n
 		if e := r.Status().Update(ctx, fqdnNetworkPolicy); e != nil {
@@ -203,6 +212,34 @@ func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context,
 	if !toCreate && networkPolicy.Annotations[ownerAnnotation] != fqdnNetworkPolicy.Name {
 		return nil, errors.New("NetworkPolicy missing owned-by annotation or owned by a different resource")
 	}
+	// egress rules
+	egressRules, nextSync, err := r.getNetworkPolicyEgressRules(ctx, fqdnNetworkPolicy)
+	if err != nil {
+		return nil, err
+	}
+	// ingress rules
+	ingressRules, ingressNextSync, err := r.getNetworkPolicyIngressRules(ctx, fqdnNetworkPolicy)
+	if err != nil {
+		return nil, err
+	}
+	// We sync just after the shortest TTL between ingress and egress rules
+	if ingressNextSync.Milliseconds() < nextSync.Milliseconds() {
+		nextSync = ingressNextSync
+	}
+
+	// NetworkPolicy the can have been modified, so we need to
+	// fetch it again before updating it.
+	networkPolicy = &networking.NetworkPolicy{}
+	if err := r.Get(ctx, client.ObjectKey{
+		Namespace: fqdnNetworkPolicy.Namespace,
+		Name:      fqdnNetworkPolicy.Name,
+	}, networkPolicy); err != nil {
+		if client.IgnoreNotFound(err) == nil {
+			// If there is none, that's OK, it means that we just haven't created it yet
+		} else {
+			return nil, err
+		}
+	}
 
 	// Updating NetworkPolicy
 	networkPolicy.Name = fqdnNetworkPolicy.Name
@@ -213,22 +250,8 @@ func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context,
 	networkPolicy.Annotations[ownerAnnotation] = fqdnNetworkPolicy.Name
 	networkPolicy.Spec.PodSelector = fqdnNetworkPolicy.Spec.PodSelector
 	networkPolicy.Spec.PolicyTypes = fqdnNetworkPolicy.Spec.PolicyTypes
-	// egress rules
-	egressRules, nextSync, err := r.getNetworkPolicyEgressRules(ctx, fqdnNetworkPolicy)
-	if err != nil {
-		return nil, err
-	}
 	networkPolicy.Spec.Egress = egressRules
-	// ingress rules
-	ingressRules, ingressNextSync, err := r.getNetworkPolicyIngressRules(ctx, fqdnNetworkPolicy)
-	if err != nil {
-		return nil, err
-	}
-	// We sync just after the shortest TTL between ingress and egress rules
 	networkPolicy.Spec.Ingress = ingressRules
-	if ingressNextSync.Milliseconds() < nextSync.Milliseconds() {
-		nextSync = ingressNextSync
-	}
 
 	// creating NetworkPolicy if needed
 	if toCreate {
@@ -297,7 +320,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
 	// TODO what should this be?
-	nextSync = 30
+	nextSync = uint32(r.Options.FQDNDnsLookupNextSyncMax)
 
 	// TODO what do we do if nothing resolves, or if the list is empty?
 	// What's the behavior of NetworkPolicies in that case?
@@ -418,7 +441,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
 	// TODO what should this be?
-	nextSync = 30
+	nextSync = uint32(r.Options.FQDNDnsLookupNextSyncMax)
 
 	// TODO what do we do if nothing resolves, or if the list is empty?
 	// What's the behavior of NetworkPolicies in that case?

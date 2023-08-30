@@ -18,6 +18,7 @@ package main
 
 import (
 	"flag"
+	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/config/options"
 	"os"
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
@@ -52,11 +53,14 @@ func main() {
 	var metricsAddr string
 	var enableLeaderElection bool
 	var probeAddr string
+	var op options.Opts
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
+	flag.IntVar(&op.UpdateFQDNRetryTime, "reconcile-retry-time", 10, "The time in seconds to wait before retrying to update FQDNNetworkPolicy")
+	flag.IntVar(&op.FQDNDnsLookupNextSyncMax, "fqdn-dns-lookup-next-sync-max", 30, "The maximum time to wait for FQDNNetworkPolicy next lookup in a single sync")
 	opts := zap.Options{
 		Development: true,
 	}
@@ -90,9 +94,10 @@ func main() {
 	}
 
 	if err = (&controllers.FQDNNetworkPolicyReconciler{
-		Client: mgr.GetClient(),
-		Log:    ctrl.Log.WithName("controllers").WithName("FQDNNetworkPolicy"),
-		Scheme: mgr.GetScheme(),
+		Client:  mgr.GetClient(),
+		Log:     ctrl.Log.WithName("controllers").WithName("FQDNNetworkPolicy"),
+		Scheme:  mgr.GetScheme(),
+		Options: op,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "FQDNNetworkPolicy")
 		os.Exit(1)

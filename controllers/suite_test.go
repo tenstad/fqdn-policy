@@ -17,6 +17,7 @@ limitations under the License.
 package controllers
 
 import (
+	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/config/options"
 	"path/filepath"
 	"testing"
 	"time"
@@ -80,9 +81,10 @@ var _ = BeforeSuite(func(done Done) {
 	Expect(err).ToNot(HaveOccurred())
 
 	err = (&FQDNNetworkPolicyReconciler{
-		Client: k8sManager.GetClient(),
-		Scheme: k8sManager.GetScheme(),
-		Log:    ctrl.Log.WithName("controllers").WithName("FQDNNetworkPolicy"),
+		Client:  k8sManager.GetClient(),
+		Scheme:  k8sManager.GetScheme(),
+		Log:     ctrl.Log.WithName("controllers").WithName("FQDNNetworkPolicy"),
+		Options: options.Opts{UpdateFQDNRetryTime: 1, FQDNDnsLookupNextSyncMax: 10},
 	}).SetupWithManager(k8sManager)
 	Expect(err).ToNot(HaveOccurred())
 
