@@ -59,7 +59,7 @@ func main() {
 	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
 		"Enable leader election for controller manager. "+
 			"Enabling this will ensure there is only one active controller manager.")
-	flag.IntVar(&op.UpdateFQDNRetryTime, "reconcile-retry-time", 10, "The time in seconds to wait before retrying to update FQDNNetworkPolicy")
+	flag.IntVar(&op.UpdateFQDNRetryTime, "update-fqdn-retry-time", 10, "The time in seconds to wait before retrying to update FQDNNetworkPolicy")
 	flag.IntVar(&op.FQDNDnsLookupNextSyncMax, "fqdn-dns-lookup-next-sync-max", 30, "The maximum time to wait for FQDNNetworkPolicy next lookup in a single sync")
 	opts := zap.Options{
 		Development: true,

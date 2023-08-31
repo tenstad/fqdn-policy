@@ -128,7 +128,7 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// It's probably related to the TTL of the DNS records.
 	nextSyncIn, err := r.updateNetworkPolicy(ctx, fqdnNetworkPolicy)
 	if err != nil {
-		log.Error(err, "unable to update NetworkPolicy")
+		log.Error(err, "could not update NetworkPolicy, "+fqdnNetworkPolicy.Name+" retrying in "+fmt.Sprint(r.Options.UpdateFQDNRetryTime)+" seconds")
 		// Need to fetch the object again before updating FQDNNetworkPolicy
 		if ee := r.Get(ctx, client.ObjectKey{
 			Namespace: req.Namespace,
@@ -143,7 +143,7 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		n := metav1.NewTime(time.Now().Add(retry))
 		fqdnNetworkPolicy.Status.NextSyncTime = &n
 		if e := r.Status().Update(ctx, fqdnNetworkPolicy); e != nil {
-			log.Error(e, "unable to update FQDNNetworkPolicy status")
+			log.Error(e, "unable to update pending FQDNNetworkPolicy status")
 			return ctrl.Result{}, e
 		}
 		return ctrl.Result{RequeueAfter: retry}, nil
@@ -167,7 +167,7 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 
 	// Updating the status of our FQDNNetworkPolicy
 	if err := r.Status().Update(ctx, fqdnNetworkPolicy); err != nil {
-		log.Error(err, "unable to update FQDNNetworkPolicy status")
+		log.Error(err, "unable to update active FQDNNetworkPolicy status")
 		return ctrl.Result{}, err
 	}
 
