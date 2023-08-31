@@ -162,6 +162,7 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	}
 
 	fqdnNetworkPolicy.Status.State = networkingv1alpha3.ActiveState
+	fqdnNetworkPolicy.Status.Reason = "NetworkPolicy updated"
 	nextSyncTime := metav1.NewTime(time.Now().Add(*nextSyncIn))
 	fqdnNetworkPolicy.Status.NextSyncTime = &nextSyncTime
 
