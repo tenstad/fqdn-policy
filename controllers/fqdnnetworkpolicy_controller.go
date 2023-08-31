@@ -131,8 +131,8 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		log.Error(err, "could not update NetworkPolicy, "+fqdnNetworkPolicy.Name+" retrying in "+fmt.Sprint(r.Options.UpdateFQDNRetryTime)+" seconds")
 		// Need to fetch the object again before updating FQDNNetworkPolicy
 		if ee := r.Get(ctx, client.ObjectKey{
-			Namespace: req.Namespace,
-			Name:      req.Name,
+			Namespace: fqdnNetworkPolicy.Namespace,
+			Name:      fqdnNetworkPolicy.Name,
 		}, fqdnNetworkPolicy); ee != nil {
 			log.Error(err, "unable to fetch FQDNNetworkPolicy")
 			return ctrl.Result{}, err
