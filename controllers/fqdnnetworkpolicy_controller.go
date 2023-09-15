@@ -20,7 +20,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang/config/options"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -41,7 +40,12 @@ type FQDNNetworkPolicyReconciler struct {
 	client.Client
 	Log     logr.Logger
 	Scheme  *runtime.Scheme
-	Options options.Opts
+	Options Opts
+}
+
+type Opts struct {
+	UpdateFQDNRetryTime      int
+	FQDNDnsLookupNextSyncMax int
 }
 
 var (
@@ -320,7 +324,10 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 	}
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
-	// TODO what should this be?
+	// If kube-dns receives a DNS response from an upstream DNS resolver with a large or "infinite" TTL
+	// GKE resolves this issue by setting a max TTL value to 30 seconds
+	// for any DNS response that has a TTL higher than 30 seconds
+	// This behavior is similar to NodeLocal DNSCache.
 	nextSync = uint32(r.Options.FQDNDnsLookupNextSyncMax)
 
 	// TODO what do we do if nothing resolves, or if the list is empty?
@@ -441,7 +448,10 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 	}
 	var nextSync uint32
 	// Highest value possible for the resync time on the FQDNNetworkPolicy
-	// TODO what should this be?
+	// If kube-dns receives a DNS response from an upstream DNS resolver with a large or "infinite" TTL
+	// GKE resolves this issue by setting a max TTL value to 30 seconds
+	// for any DNS response that has a TTL higher than 30 seconds
+	// This behavior is similar to NodeLocal DNSCache.
 	nextSync = uint32(r.Options.FQDNDnsLookupNextSyncMax)
 
 	// TODO what do we do if nothing resolves, or if the list is empty?
@@ -492,7 +502,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 				}
 				// check for AAAA lookups skip annotation
 				if fqdnNetworkPolicy.Annotations[aaaaLookupsAnnotation] == "skip" {
-					log.Info("FQDNNetworkPolicy has AAAA lookups policy set to skip, not resolving AAAA records")
+					log.V(1).Info("FQDNNetworkPolicy has AAAA lookups policy set to skip, not resolving AAAA records")
 				} else {
 					// AAAA records
 					m6 := new(dns.Msg)
