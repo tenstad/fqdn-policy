@@ -355,7 +355,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 				// timeout the next etc. So this is not too bad for now.
 				r, _, err := c.Exchange(m, "["+ns[0]+"]:53")
 				if err != nil {
-					log.Error(err, "unable to resolve "+f)
+					log.V(1).Info("unable to resolve " + f + " " + err.Error())
 					continue
 				}
 				if len(r.Answer) == 0 {
@@ -388,7 +388,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 				// timeout the next etc. So this is not too bad for now.
 				r6, _, err := c.Exchange(m6, "["+ns[0]+"]:53")
 				if err != nil {
-					log.Error(err, "unable to resolve "+f)
+					log.V(1).Info("unable to resolve " + f + " " + err.Error())
 					continue
 				}
 				if len(r6.Answer) == 0 {
