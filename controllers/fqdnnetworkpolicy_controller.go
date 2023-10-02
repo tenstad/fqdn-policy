@@ -20,6 +20,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	k8serror "k8s.io/apimachinery/pkg/api/errors"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -49,7 +50,6 @@ type Opts struct {
 }
 
 var (
-	ownerAnnotation        = "fqdnnetworkpolicies.networking.gke.io/owned-by"
 	deletePolicyAnnotation = "fqdnnetworkpolicies.networking.gke.io/delete-policy"
 	aaaaLookupsAnnotation  = "fqdnnetworkpolicies.networking.gke.io/aaaa-lookups"
 	finalizerName          = "finalizer.fqdnnetworkpolicies.networking.gke.io"
@@ -74,7 +74,6 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	_ = log.FromContext(ctx)
 	log := r.Log.WithValues("fqdnnetworkpolicy", req.NamespacedName)
 
-	// TODO(user): your logic here
 	// retrieving the FQDNNetworkPolicy on which we are working
 	fqdnNetworkPolicy := &networkingv1alpha3.FQDNNetworkPolicy{}
 	if err := r.Get(ctx, client.ObjectKey{
@@ -132,7 +131,7 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	// It's probably related to the TTL of the DNS records.
 	nextSyncIn, err := r.updateNetworkPolicy(ctx, fqdnNetworkPolicy)
 	if err != nil {
-		log.Error(err, "could not update NetworkPolicy, "+fqdnNetworkPolicy.Name+" retrying in "+fmt.Sprint(r.Options.UpdateFQDNRetryTime)+" seconds")
+		log.Error(err, "unable to update NetworkPolicy, retrying in "+fmt.Sprint(r.Options.UpdateFQDNRetryTime)+" seconds")
 		// Need to fetch the object again before updating FQDNNetworkPolicy
 		if ee := r.Get(ctx, client.ObjectKey{
 			Namespace: fqdnNetworkPolicy.Namespace,
@@ -152,12 +151,12 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 		}
 		return ctrl.Result{RequeueAfter: retry}, nil
 	}
-	log.Info("NetworkPolicy updated, next sync in " + fmt.Sprint(nextSyncIn))
+	log.V(2).Info("NetworkPolicy reconciled, next sync in: " + fmt.Sprint(nextSyncIn))
 
 	// Need to fetch the object again before updating it
 	// as its status may have changed since the first time
 	// we fetched it.
-	if err := r.Get(ctx, client.ObjectKey{
+	if err = r.Get(ctx, client.ObjectKey{
 		Namespace: req.Namespace,
 		Name:      req.Name,
 	}, fqdnNetworkPolicy); err != nil {
@@ -171,8 +170,8 @@ func (r *FQDNNetworkPolicyReconciler) Reconcile(ctx context.Context, req ctrl.Re
 	fqdnNetworkPolicy.Status.NextSyncTime = &nextSyncTime
 
 	// Updating the status of our FQDNNetworkPolicy
-	if err := r.Status().Update(ctx, fqdnNetworkPolicy); err != nil {
-		log.Error(err, "unable to update active FQDNNetworkPolicy status")
+	if err = r.Status().Update(ctx, fqdnNetworkPolicy); err != nil {
+		log.Info("unable to update active FQDNNetworkPolicy status")
 		return ctrl.Result{}, err
 	}
 
@@ -187,8 +186,10 @@ func (r *FQDNNetworkPolicyReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		Complete(r)
 }
 
-func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context,
-	fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) (*time.Duration, error) {
+func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(
+	ctx context.Context,
+	fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy,
+) (*time.Duration, error) {
 	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
 	toCreate := false
 
@@ -234,43 +235,51 @@ func (r *FQDNNetworkPolicyReconciler) updateNetworkPolicy(ctx context.Context,
 
 	// NetworkPolicy the can have been modified, so we need to
 	// fetch it again before updating it.
-	networkPolicy = &networking.NetworkPolicy{}
-	if err := r.Get(ctx, client.ObjectKey{
+	if err = r.Get(ctx, client.ObjectKey{
 		Namespace: fqdnNetworkPolicy.Namespace,
 		Name:      fqdnNetworkPolicy.Name,
 	}, networkPolicy); err != nil {
 		if client.IgnoreNotFound(err) == nil {
-			// If there is none, that's OK, it means that we just haven't created it yet
 		} else {
 			return nil, err
 		}
 	}
 
-	// Updating NetworkPolicy
-	networkPolicy.Name = fqdnNetworkPolicy.Name
-	networkPolicy.Namespace = fqdnNetworkPolicy.Namespace
-	if networkPolicy.Annotations == nil {
-		networkPolicy.Annotations = make(map[string]string)
-	}
-	networkPolicy.Annotations[ownerAnnotation] = fqdnNetworkPolicy.Name
-	networkPolicy.Spec.PodSelector = fqdnNetworkPolicy.Spec.PodSelector
-	networkPolicy.Spec.PolicyTypes = fqdnNetworkPolicy.Spec.PolicyTypes
-	networkPolicy.Spec.Egress = egressRules
-	networkPolicy.Spec.Ingress = ingressRules
+	netpol := Netpol{NetworkPolicy: networkPolicy}
+	netpol.UpdateMetadata(fqdnNetworkPolicy)
 
-	// creating NetworkPolicy if needed
-	if toCreate {
-		if err := r.Create(ctx, networkPolicy); err != nil {
+	if k8serror.IsNotFound(err) {
+		netpol.UpdateEgress(egressRules)
+		netpol.UpdateIngress(ingressRules)
+		if err := r.Create(ctx, netpol.NetworkPolicy); err != nil {
 			log.Error(err, "unable to create NetworkPolicy")
 			return nil, err
 		}
+		log.V(2).Info("NetworkPolicy created")
+		return nextSync, nil
 	}
-	// Updating the NetworkPolicy
-	if err := r.Update(ctx, networkPolicy); err != nil {
-		log.Error(err, "unable to update NetworkPolicy")
+
+	equalEgress, err := netpol.EgressRulesEquals(egressRules)
+	if err != nil {
 		return nil, err
 	}
 
+	equalIngress, err := netpol.IngressRulesEquals(ingressRules)
+	if err != nil {
+		return nil, err
+	}
+
+	if equalEgress && equalIngress {
+		log.V(2).Info("NetworkPolicy is up to date")
+		return nextSync, nil
+	}
+
+	log.V(2).Info("NetworkPolicy changed, updating")
+	netpol.UpdateEgress(egressRules)
+	netpol.UpdateIngress(ingressRules)
+	if err := r.Update(ctx, netpol.NetworkPolicy); err != nil {
+		return nil, err
+	}
 	return nextSync, nil
 }
 
@@ -314,7 +323,7 @@ func (r *FQDNNetworkPolicyReconciler) deleteNetworkPolicy(ctx context.Context,
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyIngressRule, *time.Duration, error) {
 	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
 	fir := fqdnNetworkPolicy.Spec.Ingress
-	rules := []networking.NetworkPolicyIngressRule{}
+	var rules []networking.NetworkPolicyIngressRule
 
 	// getting the nameservers from the local /etc/resolv.conf
 	ns, err := getNameservers()
@@ -333,7 +342,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 	// TODO what do we do if nothing resolves, or if the list is empty?
 	// What's the behavior of NetworkPolicies in that case?
 	for _, frule := range fir {
-		peers := []networking.NetworkPolicyPeer{}
+		var peers []networking.NetworkPolicyPeer
 		for _, from := range frule.From {
 			for _, fqdn := range from.FQDNs {
 				f := fqdn
@@ -353,9 +362,15 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 				// by default only if options rotate is set in resolv.conf
 				// they are rotated. Otherwise the first is used, after a (5s)
 				// timeout the next etc. So this is not too bad for now.
-				r, _, err := c.Exchange(m, "["+ns[0]+"]:53")
+				conn, err := c.Dial("[" + ns[0] + "]:53")
 				if err != nil {
-					log.V(1).Info("unable to resolve " + f + " " + err.Error())
+					log.Error(err, "unable to dial "+ns[0]+":53")
+					continue
+				}
+
+				r, _, err := c.ExchangeWithConn(m, conn)
+				if err != nil {
+					log.Error(err, "unable to resolve", "fqdn", f, "ans", r.String())
 					continue
 				}
 				if len(r.Answer) == 0 {
@@ -386,9 +401,15 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 				// by default only if options rotate is set in resolv.conf
 				// they are rotated. Otherwise the first is used, after a (5s)
 				// timeout the next etc. So this is not too bad for now.
-				r6, _, err := c.Exchange(m6, "["+ns[0]+"]:53")
+				conn, err = c.Dial("[" + ns[0] + "]:53")
 				if err != nil {
-					log.V(1).Info("unable to resolve " + f + " " + err.Error())
+					log.Error(err, "unable to dial "+ns[0]+":53")
+					continue
+				}
+
+				r6, _, err := c.ExchangeWithConn(m6, conn)
+				if err != nil {
+					log.Error(err, "unable to resolve", "fqdn", f, "ans", r.String())
 					continue
 				}
 				if len(r6.Answer) == 0 {
@@ -438,7 +459,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyIngressRules(ctx context.C
 func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Context, fqdnNetworkPolicy *networkingv1alpha3.FQDNNetworkPolicy) ([]networking.NetworkPolicyEgressRule, *time.Duration, error) {
 	log := r.Log.WithValues("fqdnnetworkpolicy", fqdnNetworkPolicy.Namespace+"/"+fqdnNetworkPolicy.Name)
 	fer := fqdnNetworkPolicy.Spec.Egress
-	rules := []networking.NetworkPolicyEgressRule{}
+	var rules []networking.NetworkPolicyEgressRule
 
 	// getting the nameservers from the local /etc/resolv.conf
 	ns, err := getNameservers()
@@ -457,7 +478,7 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 	// TODO what do we do if nothing resolves, or if the list is empty?
 	// What's the behavior of NetworkPolicies in that case?
 	for _, frule := range fer {
-		peers := []networking.NetworkPolicyPeer{}
+		var peers []networking.NetworkPolicyPeer
 		for _, to := range frule.To {
 			for _, fqdn := range to.FQDNs {
 				f := fqdn
@@ -477,9 +498,14 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 				// by default only if options rotate is set in resolv.conf
 				// they are rotated. Otherwise the first is used, after a (5s)
 				// timeout the next etc. So this is not too bad for now.
-				r, _, err := c.Exchange(m, "["+ns[0]+"]:53")
+				conn, err := c.Dial("[" + ns[0] + "]:53")
 				if err != nil {
-					log.Error(err, "unable to resolve "+f)
+					log.Error(err, "unable to dial "+ns[0]+":53")
+					continue
+				}
+				r, _, err := c.ExchangeWithConn(m, conn)
+				if err != nil {
+					log.Error(err, "unable to resolve", "fqdn", f, "ans", r.String())
 					continue
 				}
 				if len(r.Answer) == 0 {
@@ -513,9 +539,14 @@ func (r *FQDNNetworkPolicyReconciler) getNetworkPolicyEgressRules(ctx context.Co
 					// by default only if options rotate is set in resolv.conf
 					// they are rotated. Otherwise the first is used, after a (5s)
 					// timeout the next etc. So this is not too bad for now.
-					r6, _, err := c.Exchange(m6, "["+ns[0]+"]:53")
+					conn, err := c.Dial("[" + ns[0] + "]:53")
 					if err != nil {
-						log.Error(err, "unable to resolve "+f)
+						log.Error(err, "unable to dial "+ns[0]+":53")
+						continue
+					}
+					r6, _, err := c.ExchangeWithConn(m6, conn)
+					if err != nil {
+						log.Error(err, "unable to resolve", "fqdn", f, "ans", r.String())
 						continue
 					}
 					if len(r6.Answer) == 0 {

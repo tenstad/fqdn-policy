@@ -5,8 +5,10 @@ go 1.20
 require (
 	github.com/go-logr/logr v1.2.4
 	github.com/miekg/dns v1.1.54
+	github.com/mitchellh/hashstructure/v2 v2.0.2
 	github.com/onsi/ginkgo v1.16.5
 	github.com/onsi/gomega v1.27.7
+	github.com/stretchr/testify v1.8.1
 	golang.org/x/net v0.10.0
 	k8s.io/api v0.27.2
 	k8s.io/apimachinery v0.27.2
@@ -43,6 +45,7 @@ require (
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nxadm/tail v1.4.8 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.15.1 // indirect
 	github.com/prometheus/client_model v0.4.0 // indirect
 	github.com/prometheus/common v0.44.0 // indirect
