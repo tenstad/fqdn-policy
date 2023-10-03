@@ -1,7 +1,7 @@
 apiVersion: v2
 name: fqdn-policy
 sources:
-  - https://github.com/nais/gke-fqdnnetworkpolicies/tree/main/charts/
+  - https://github.com/nais/fqdn-policy/tree/main/charts/
 description: A Helm chart containing a fork of the GoogleCloudPlatform/gke-fqdnnetworkpolicies-golang operator
 type: application
 version: 0.0.5
