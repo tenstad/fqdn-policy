@@ -6,7 +6,7 @@ on:
     paths-ignore:
       - '*.md'
 env:
-  NAME: gke-fqdnnetworkpolicies
+  NAME: fqdn-policy
   FEATURE_REPOSITORY: oci://europe-north1-docker.pkg.dev/nais-io/nais/feature
 
 jobs:
