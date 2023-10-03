@@ -10,7 +10,7 @@ containerSecurityContext:
   allowPrivilegeEscalation: false
 
 image:
-  repository: "gcr.io/fqdnnetworkpolicies/controller"
+  repository: "europe-north1-docker.pkg.dev/nais-io/nais/images/fqdn-policy"
   tag: "0.3"
 
 podSecurityContext:
