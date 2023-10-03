@@ -1,0 +1,38 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: fqdnnetworkpolicies-leader-election-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: fqdnnetworkpolicies-leader-election-role
+subjects:
+- kind: ServiceAccount
+  name: fqdn-policy
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fqdnnetworkpolicies-manager-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fqdnnetworkpolicies-manager-role
+subjects:
+- kind: ServiceAccount
+  name: fqdn-policy
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: fqdnnetworkpolicies-proxy-rolebinding
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: fqdnnetworkpolicies-proxy-role
+subjects:
+- kind: ServiceAccount
+  name: fqdn-policy
+  namespace: {{ .Release.Namespace }}

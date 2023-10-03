@@ -1,0 +1,25 @@
+containerSecurityContext:
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 65532
+  seccompProfile:
+    type: RuntimeDefault
+  allowPrivilegeEscalation: false
+
+image:
+  repository: "gcr.io/fqdnnetworkpolicies/controller"
+  tag: "0.3"
+
+podSecurityContext:
+  seccompProfile:
+    type: RuntimeDefault
+
+resources:
+  limits:
+    memory: 512Mi
+  requests:
+    cpu: 100m
+    memory: 20Mi

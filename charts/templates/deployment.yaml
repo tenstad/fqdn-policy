@@ -1,0 +1,73 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    control-plane: controller-manager
+    {{- include "fqdn-policy.labels" . | nindent 4 }}
+  name: fqdnnetworkpolicies-controller-manager
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      control-plane: controller-manager
+      {{- include "fqdn-policy.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        control-plane: controller-manager
+        {{- include "fqdn-policy.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: charts
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - args:
+            - --metrics-bind-address=127.0.0.1:8080
+            - --leader-elect
+            - --zap-log-level=error
+            - --skip-aaaa
+            - --next-sync-period=60
+          command:
+            - /manager
+          env:
+            - name: DEV_MODE
+              valueFrom:
+                configMapKeyRef:
+                  key: DEV_MODE
+                  name: fqdnnetworkpolicies-manager-config-f6mt7hh26c
+          image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
+          name: manager
+          ports:
+            - containerPort: 9443
+              name: webhook-server
+              protocol: TCP
+            - containerPort: 8080
+              name: metrics
+              protocol: TCP
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - mountPath: /tmp/k8s-webhook-server/serving-certs
+              name: cert
+              readOnly: true
+          securityContext:
+            {{- toYaml .Values.containerSecurityContext | nindent 12 }}
+      terminationGracePeriodSeconds: 10
+      volumes:
+        - name: cert
+          secret:
+            defaultMode: 420
+            secretName: {{ .Release.Name }}-webhook-server-cert

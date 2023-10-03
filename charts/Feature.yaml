@@ -1,0 +1,28 @@
+dependencies:
+  - allOf:
+      - cert-manager
+environmentKinds:
+  - tenant
+  - management
+  - legacy
+values:
+  image.tag:
+    displayName: Image version
+    config:
+      type: string
+  resources.limits.cpu:
+    displayName: CPU limit
+    config:
+      type: string
+  resources.limits.memory:
+    displayName: Memory limit
+    config:
+      type: string
+  resources.requests.cpu:
+    displayName: CPU request
+    config:
+      type: string
+  resources.requests.memory:
+    displayName: Memory request
+    config:
+      type: string

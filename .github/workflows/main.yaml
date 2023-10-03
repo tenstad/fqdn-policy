@@ -68,15 +68,15 @@ jobs:
         run: |-
           helm push ${{ env.NAME }}*.tgz ${{ env.FEATURE_REPOSITORY }}
 
-# rollout:
-#   needs:
-#     - build_and_push
-#   runs-on: fasit-deploy
-#   permissions:
-#     id-token: write
-#   steps:
-#     - uses: nais/fasit-deploy@v2
-#       with:
-#         chart: ${{ env.FEATURE_REPOSITORY }}/${{ env.NAME }}
-#         version: ${{ needs.build_and_push.outputs.version }}
-#         feature_name: ${{ env.NAME }}
+  rollout:
+    needs:
+      - build_and_push
+    runs-on: fasit-deploy
+    permissions:
+      id-token: write
+    steps:
+      - uses: nais/fasit-deploy@v2
+        with:
+          chart: ${{ env.FEATURE_REPOSITORY }}/${{ env.NAME }}
+          version: ${{ needs.build_and_push.outputs.version }}
+          feature_name: ${{ env.NAME }}
