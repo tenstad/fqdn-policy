@@ -5,13 +5,13 @@ on:
       - main
     paths-ignore:
       - '*.md'
+
 env:
   NAME: fqdn-policy
   FEATURE_REPOSITORY: oci://europe-north1-docker.pkg.dev/nais-io/nais/feature
 
 jobs:
   tests:
-    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3.3.0
