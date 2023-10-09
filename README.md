@@ -9,14 +9,14 @@ This proactive approach allows NAIS to address needs and maintain control over t
 
 A publicly available image is pushed with every commit to `main` for now, and can be found at [fqdn-policy image](https://github.com/orgs/nais/packages?repo_name=fqdn-policy). 
 
-This image is signed and attested using [Cosign](https://github.com/sigstore/cosign).
+SBOM is generated with [cyclonedx](https://github.com/CycloneDX), image is signed and attested using [cosign](https://github.com/sigstore/cosign).
 
 You can validate the image attestations by executing the following commands:
 
 ```
 echo IDENTITY=https://github.com/nais/fqdn-policy/.github/workflows/main.yaml@refs/heads/main
 echo ISSUER=https://token.actions.githubusercontent.com
-cosign verify-attestation  --certificate-oidc-issuer=$ISSUER --certificate-identity=$IDENTITY ghcr.io/nais/fqdn-policy@sha256:xxx
+cosign verify-attestation --type=cyclonedx --certificate-oidc-issuer=$ISSUER --certificate-identity=$IDENTITY ghcr.io/nais/fqdn-policy@sha256:xxx
 ```
 
 # 🚨 Warning 🚨
