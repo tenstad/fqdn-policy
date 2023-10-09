@@ -24,6 +24,7 @@ jobs:
   dependabot_pr:
     runs-on: ubuntu-latest
     if: ${{ github.actor == 'dependabot[bot]' }}
+    needs: tests_pr
     steps:
       - name: Dependabot metadata
         id: dependabot-metadata
@@ -38,6 +39,7 @@ jobs:
    #  Wait with this step
    #   - name: Enable auto-merge for Dependabot PRs
    #     if: ${{ steps.dependabot-metadata.outputs.update-type == 'version-update:semver-minor' }}
+   #     needs: dependabot_pr
    #     run: gh pr merge --auto --squash "$PR_URL"
    #     env:
    #       PR_URL: ${{ github.event.pull_request.html_url }}
