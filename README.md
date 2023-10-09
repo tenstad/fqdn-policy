@@ -7,7 +7,17 @@ Therefore, NAIS has opted to take control of the project and adapt it to suit ot
 By managing this forked repository, NAIS ensures that they can tailor the project to align with objectives and operational requirements effectively. 
 This proactive approach allows NAIS to address needs and maintain control over the project's development, rather than waiting for a solution that may not be readily available or suitable.
 
-A public image is available at gchr.io.
+A publicly available image is pushed with every commit to `main` for now, and can be found at [fqdn-policy image](https://github.com/orgs/nais/packages?repo_name=fqdn-policy). 
+
+This image is signed and attested using [Cosign](https://github.com/sigstore/cosign).
+
+You can validate the image attestations by executing the following commands:
+
+```
+echo IDENTITY=https://github.com/nais/fqdn-policy/.github/workflows/main.yaml@refs/heads/main
+echo ISSUER=https://token.actions.githubusercontent.com
+cosign verify-attestation  --certificate-oidc-issuer=$ISSUER --certificate-identity=$IDENTITY ghcr.io/nais/fqdn-policy@sha256:xxx
+```
 
 # 🚨 Warning 🚨
 
