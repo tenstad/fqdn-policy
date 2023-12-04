@@ -7,12 +7,16 @@ spec:
     matchLabels:
       app.kubernetes.io/instance: {{ .Release.Name }}
   egress: 
-  - to:
+  - ports:
+    - port: 53
+      protocol: UDP
+    - port: 53
+      protocol: TCP
+    to:
     - namespaceSelector: {}
       podSelector:
         matchLabels:
           k8s-app: kube-dns
-  - to:
     - namespaceSelector: {}
       podSelector:
         matchLabels:
